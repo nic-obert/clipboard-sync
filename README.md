@@ -1,2 +1,2 @@
-# clipboard-sync
+# clipboard-sync-server
 A clipboard synchronization service

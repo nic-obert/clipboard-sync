@@ -10,7 +10,7 @@ def get_address() -> str:
 
 def main() -> None:
     address = get_address()
-    port = 50018
+    port = 50019
 
     server = Server((address, port))
     server.start()

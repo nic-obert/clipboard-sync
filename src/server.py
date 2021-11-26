@@ -10,9 +10,11 @@ class Server:
     def __init__(self, address: Tuple[str, int]) -> None:
         self.address = address
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind(self.address)
         self.clients: List[Client] = []
         self.running = False
+        self.current_clip: str = ''
 
 
     def listen(self) -> None:
@@ -26,7 +28,6 @@ class Server:
         
         except KeyboardInterrupt:
                 self.stop()
-                return
 
 
     def stop(self) -> None:
@@ -36,32 +37,40 @@ class Server:
             for client in self.clients:
                 client.disconnect()
             self.socket.close()
-    
-    
-    def get_newest_clip_holder(self) -> Client:
-        newest = self.clients[0]
-        for client in self.clients:
-            if client.last_updated > newest.last_updated:
-                newest = client
-        return newest
+        print("Server stopped")
     
 
-    def update_clients(self, clip: str, owner: Client) -> None:
+    def update_clipboard(self, clip: str, owner: Client) -> None:
         for client in self.clients:
             if client != owner:
-                client.update_clip(clip)
+                try:
+                    client.send_clip(clip)
+                except BrokenPipeError:
+                    client.disconnect()
+                    self.clients.remove(client)
+
+
+    def get_updates(self) -> Client:
+        newest_clip_holder = self.clients[0]
+        for client in self.clients:
+            client.update()
+            if client.last_updated > newest_clip_holder.last_updated:
+                newest_clip_holder = client
+
+        return newest_clip_holder
 
 
     def main_loop(self) -> None:
         try:
             while self.running:
                 if len(self.clients) > 0:
-                    newest_client = self.get_newest_clip_holder()
-                    self.update_clients(newest_client.get_clip(), newest_client)
-        
+                    newest_clip_holder = self.get_updates()
+                    if newest_clip_holder.clip != self.current_clip:
+                        self.current_clip = newest_clip_holder.clip
+                        self.update_clipboard(self.current_clip, newest_clip_holder)
+
         except KeyboardInterrupt:
             self.stop()
-            return
 
 
     def start(self) -> None:
@@ -70,5 +79,4 @@ class Server:
         listener = threading.Thread(target=self.listen)
         listener.start()
         self.main_loop()
-        print("Server stopped")
 
