@@ -22,10 +22,12 @@ class Client:
         self.address = address
         self.last_updated = time.time_ns()
         self.clip: str = ''
+        self.connected = True
     
 
     def disconnect(self) -> None:
         self.socket.close()
+        self.connected = False
 
 
     def send_clip(self, clip: str) -> None:
