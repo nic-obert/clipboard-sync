@@ -26,8 +26,19 @@ class Client:
     
 
     def disconnect(self) -> None:
-        self.socket.close()
-        self.connected = False
+        if self.connected:
+            self.connected = False
+            self.socket.close()
+            print(f'Disconnected from {self.address}')
+
+    
+    def update_connection_status(self) -> bool:
+        try:
+            self.socket.send(b'p')
+            return True
+        except:
+            self.disconnect()
+            return False
 
 
     def send_clip(self, clip: str) -> None:
@@ -35,8 +46,24 @@ class Client:
     
 
     def update(self) -> None:
-        clip = recvall(self.socket)
-        if clip:
-            self.clip = clip.decode('utf-8')
-            self.last_updated = time.time_ns()
+        try:
+            clip = recvall(self.socket)
+            if clip:
+                self.clip = clip.decode('utf-8')
+                self.last_updated = time.time_ns()
+        
+        except ConnectionResetError:
+            self.disconnect()
+        
+        except Exception as e:
+            print(e)
+            self.disconnect()
+        
+
+    def __str__(self) -> str:
+        return f'<Client: {self.address}>'
+    
+
+    def __repr__(self) -> str:
+        return self.__str__()
 

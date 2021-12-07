@@ -2,7 +2,7 @@ import socket
 import threading
 import time
 import os
-from typing import List, Tuple
+from typing import List, Tuple, final
 
 from client import Client
 
@@ -23,17 +23,38 @@ class Server:
 
     def listen(self) -> None:
         try:
-            self.socket.listen()
+            self.socket.listen(5)
             while self.running:
                 client_socket, client_address = self.socket.accept()
                 print(f"Client connected from {client_address[0]}:{client_address[1]}")
+                
                 client = Client(client_socket, client_address)
                 self.clients.append(client)
+                print(f"Clients currently connected: {len(self.clients)}")
+
                 client_thread = threading.Thread(target=self.client_thread, args=(client,))
                 client_thread.start()
         
         except KeyboardInterrupt:
-                self.stop()
+            print("Keyboard interrupt")
+        
+        except Exception as e:
+            print(e)
+
+        finally:
+            self.stop()
+
+
+    def remove_client(self, client: Client) -> None:
+        if client.connected:
+            client.disconnect()
+            print(f"Removing client from {client.address[0]}:{client.address[1]}")
+        
+        try:
+            self.clients.remove(client)
+            print(f"Client {client.address[0]}:{client.address[1]} removed")
+        except ValueError:
+            pass
 
 
     def client_thread(self, client: Client) -> None:
@@ -41,16 +62,14 @@ class Server:
             while self.running and client.connected:
                 client.update()
                 time.sleep(self.SCAN_DELAY)
-            
-            print(f"Client {client.address[0]}:{client.address[1]} disconnected")
-        
-        except BrokenPipeError:
-            print(f"Client {client.address[0]}:{client.address[1]} disconnected")
-            client.disconnect()
-            self.clients.remove(client)
-        
+
         except KeyboardInterrupt:
             self.stop()
+        
+        except Exception as e:
+            print(e)
+
+        self.remove_client(client)
 
 
     def stop(self) -> None:
@@ -59,7 +78,7 @@ class Server:
             print("Stopping server...")
             
             for client in self.clients:
-                client.disconnect()
+                self.remove_client(client)
             
             self.socket.close()
             print("Server stopped")
@@ -71,15 +90,19 @@ class Server:
             if client != owner:
                 try:
                     client.send_clip(clip)
+                
                 except BrokenPipeError:
-                    client.disconnect()
-                    self.clients.remove(client)
+                    self.remove_client(client)
 
 
     def get_updates(self) -> Client:
         newest_clip_holder = self.clients[0]
 
         for client in self.clients:
+            if not client.update_connection_status():
+                self.remove_client(client)
+                continue
+
             if client.last_updated > newest_clip_holder.last_updated:
                 newest_clip_holder = client
             
@@ -91,10 +114,11 @@ class Server:
             while self.running:
                 if len(self.clients) == 0:
                     continue
+
                 newest_clip_holder = self.get_updates()
                 if newest_clip_holder.clip != self.current_clip:
                     self.current_clip = newest_clip_holder.clip
-                    print(f"New clipboard: {self.current_clip}")
+                    #print(f"New clipboard: {self.current_clip}")
                     self.update_clipboard(self.current_clip, newest_clip_holder)
                 
                 time.sleep(self.SCAN_DELAY)
